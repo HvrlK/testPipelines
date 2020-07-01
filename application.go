@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
@@ -36,19 +37,42 @@ func main() {
 		log.Fatal(err)
 	}
 
-	headers := make(chan *types.Header)
-	sub, err := client.SubscribeNewHead(context.Background(), headers)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	go handleNewBlock(client, headers, sub)
+	go handleNewBlock(client)
+	go subscribeLogs(client)
 
 	_ = r.Run(":" + port)
 
 }
 
-func handleNewBlock(client *ethclient.Client, headers chan *types.Header, sub ethereum.Subscription) {
+func subscribeLogs(client *ethclient.Client)  {
+	contractAddress := common.HexToAddress("0xad6d458402f60fd3bd25163575031acdce07538d")
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{
+			contractAddress,
+		},
+	}
+
+	logs := make(chan types.Log)
+	sub, err := client.SubscribeFilterLogs(context.Background(), query, logs)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for {
+		select {
+		case err := <-sub.Err():
+			log.Fatal(err)
+		case vLog := <-logs:
+			fmt.Println(vLog)
+		}
+	}
+}
+
+func handleNewBlock(client *ethclient.Client) {
+	headers := make(chan *types.Header)
+	sub, err := client.SubscribeNewHead(context.Background(), headers)
+	if err != nil {
+		log.Fatal(err)
+	}
 	for {
 		select {
 		case err := <-sub.Err():
